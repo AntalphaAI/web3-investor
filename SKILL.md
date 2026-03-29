@@ -1,6 +1,6 @@
 ---
 name: web3-investor
-version: 0.5.8
+version: 0.5.10
 description: AI-friendly Web3 investment infrastructure for autonomous agents. Use when (1) discovering and analyzing DeFi/NFT investment opportunities, (2) executing secure transactions via local keystore signer REST API with preview-approve-execute state machine, (3) managing portfolio with dashboards and expiry alerts. Supports base and ethereum chains, configurable security constraints including whitelist protection, transaction limits, and mandatory simulation before execution.
 author: Antalpha AI Team
 metadata:
