@@ -28,7 +28,6 @@ Searches DeFi yield opportunities across multiple sources with real-time data.
 
 ### MCP (AntAlpha)
 - **Endpoint**: `https://mcp.prime.antalpha.com/mcp`
-- **Fallback**: `http://47.85.100.251:3000`
 - **Use Case**: Real-time DeFi opportunity discovery
 - **Configuration**: See `config/config.json` → `discovery.mcp_url`
 

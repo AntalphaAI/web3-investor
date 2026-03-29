@@ -1,6 +1,6 @@
 ---
 name: web3-investor
-version: 0.1.1
+version: 0.1.2
 description: AI-friendly Web3 investment infrastructure for autonomous agents. Use when (1) discovering and analyzing DeFi/NFT investment opportunities, (2) executing secure transactions via local keystore signer REST API with preview-approve-execute state machine, (3) managing portfolio with dashboards and expiry alerts. Supports base and ethereum chains, configurable security constraints including whitelist protection, transaction limits, and mandatory simulation before execution.
 author: Antalpha AI Team
 metadata:
@@ -9,6 +9,22 @@ metadata:
     - pip
   pip:
     - requests
+  env:
+    - name: DUNE_API_KEY
+      description: Dune Analytics API key for on-chain analytics
+      required: false
+      sensitive: true
+    - name: WEB3_INVESTOR_API_URL
+      description: Signer REST API endpoint (default: http://localhost:3000/api)
+      required: false
+    - name: WEB3_INVESTOR_DEBANK_API_KEY
+      description: Debank API key for portfolio tracking
+      required: false
+      sensitive: true
+    - name: ALCHEMY_API_KEY
+      description: Alchemy API key for enhanced RPC access
+      required: false
+      sensitive: true
 ---
 
 # Web3 Investor Skill
