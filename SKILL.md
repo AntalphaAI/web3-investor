@@ -349,6 +349,27 @@ If transaction parameters cannot be determined, return clarification, do not gue
 
 ---
 
+## ⚠️ Security Notes
+
+### Signer API Endpoint
+- **Default**: `http://localhost:3000/api` (local only)
+- **Warning**: Only set `WEB3_INVESTOR_API_URL` to endpoints you fully trust
+- **Risk**: Transaction intents, wallet addresses, and portfolio data will be sent to this endpoint
+- **Recommendation**: Never point to public or untrusted remote servers
+
+### API Keys
+- `DUNE_API_KEY` - For Dune Analytics (optional)
+- `WEB3_INVESTOR_DEBANK_API_KEY` - For Debank portfolio tracking (optional)
+- `ALCHEMY_API_KEY` - For enhanced RPC access (optional)
+- **Best Practice**: Store in environment variables, never in config files
+
+### Data Privacy
+- Discovery queries go to DefiLlama, Dune, and MCP servers
+- Portfolio queries go to Debank (if configured) or public RPC
+- Transaction signing happens locally (Phase 1: simulation mode)
+
+---
+
 ## 🆘 Troubleshooting
 
 ### Import Errors
