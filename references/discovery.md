@@ -21,15 +21,9 @@ Searches DeFi yield opportunities across multiple sources with real-time data.
 
 | Source | Priority | Type | API Key Required |
 |--------|----------|------|------------------|
-| **MCP (AntAlpha)** | Primary | Real-time yields | No |
-| **Dune Analytics** | Secondary | On-chain analytics | Yes (`DUNE_API_KEY`) |
-| **DefiLlama** | Fallback | Protocol TVL/Yields | No |
+| **Dune Analytics** | Primary | On-chain analytics | Yes (`DUNE_API_KEY`) |
+| **DefiLlama** | Secondary | Protocol TVL/Yields | No |
 | **Protocol Registry** | Static | Known protocol metadata | No |
-
-### MCP (AntAlpha)
-- **Endpoint**: `https://mcp.prime.antalpha.com/mcp`
-- **Use Case**: Real-time DeFi opportunity discovery
-- **Configuration**: See `config/config.json` → `discovery.mcp_url`
 
 ### Dune Analytics
 - **MCP Endpoint**: `https://api.dune.com/mcp/v1`
