@@ -1,33 +1,31 @@
 ---
 name: web3-investor
-version: 0.5.7
+version: 0.5.8
 description: AI-friendly Web3 investment infrastructure for autonomous agents. Use when (1) discovering and analyzing DeFi/NFT investment opportunities, (2) executing secure transactions via local keystore signer REST API with preview-approve-execute state machine, (3) managing portfolio with dashboards and expiry alerts. Supports base and ethereum chains, configurable security constraints including whitelist protection, transaction limits, and mandatory simulation before execution.
 author: Antalpha AI Team
 metadata:
-  requires:
-    - python3
-    - pip
-  pip:
-    - requests
-  install:
-    type: instruction-only
-  env_vars:
-    - name: DUNE_API_KEY
-      description: Dune Analytics API key for on-chain analytics
-      required: false
-      sensitive: true
-    - name: ALCHEMY_API_KEY
-      description: Alchemy API key for enhanced RPC access
-      required: false
-      sensitive: true
-    - name: WEB3_INVESTOR_DEBANK_API_KEY
-      description: Debank API key for portfolio tracking
-      required: false
-      sensitive: true
-    - name: WEB3_INVESTOR_API_URL
-      description: Signer REST API endpoint (default: http://localhost:3000/api)
-      required: false
-      sensitive: false
+  openclaw:
+    requires:
+      env:
+        - name: DUNE_API_KEY
+          description: Dune Analytics API key for on-chain analytics
+          required: false
+          sensitive: true
+        - name: ALCHEMY_API_KEY
+          description: Alchemy API key for enhanced RPC access
+          required: false
+          sensitive: true
+        - name: WEB3_INVESTOR_DEBANK_API_KEY
+          description: Debank API key for portfolio tracking
+          required: false
+          sensitive: true
+        - name: WEB3_INVESTOR_API_URL
+          description: Signer REST API endpoint (default: http://localhost:3000/api)
+          required: false
+    security_notes:
+      - WEB3_INVESTOR_API_URL defaults to localhost - only set to endpoints you trust
+      - Transaction requests will be sent to the configured signer endpoint
+      - API keys should be stored in environment variables, never in config files
 ---
 
 # Web3 Investor Skill
