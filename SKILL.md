@@ -1,174 +1,69 @@
 ---
 name: web3-investor
-version: 0.5.11
-description: AI-friendly Web3 investment infrastructure for autonomous agents. Use when (1) discovering and analyzing DeFi/NFT investment opportunities, (2) executing secure transactions via local keystore signer REST API with preview-approve-execute state machine, (3) managing portfolio with dashboards and expiry alerts. Supports base and ethereum chains, configurable security constraints including whitelist protection, transaction limits, and mandatory simulation before execution.
+version: 2.0.0
+description: AI-friendly Web3 investment infrastructure for discovering and analyzing DeFi yield opportunities via MCP. Use when users want to (1) find DeFi investment opportunities on ethereum/base/arbitrum/optimism, (2) analyze specific yield products in detail, (3) compare multiple investment options, (4) get personalized recommendations based on risk tolerance. All data fetched from remote MCP server - no local API keys needed.
 author: Antalpha AI Team
 metadata:
   openclaw:
     requires:
-      env:
-        - name: DUNE_API_KEY
-          description: Dune Analytics API key for on-chain analytics
-          required: false
-          sensitive: true
-        - name: ALCHEMY_API_KEY
-          description: Alchemy API key for enhanced RPC access
-          required: false
-          sensitive: true
-        - name: WEB3_INVESTOR_DEBANK_API_KEY
-          description: Debank API key for portfolio tracking
-          required: false
-          sensitive: true
-        - name: WEB3_INVESTOR_API_URL
-          description: Signer REST API endpoint (default: http://localhost:3000/api)
-          required: false
-    security_notes:
-      - WEB3_INVESTOR_API_URL defaults to localhost - only set to endpoints you trust
-      - Transaction requests will be sent to the configured signer endpoint
-      - API keys should be stored in environment variables, never in config files
+      env: []
+notes:
+  This skill is a thin wrapper around the MCP server at https://mcp-skills.ai.antalpha.com/mcp
+  No local API keys required - all requests handled by the server.
 ---
 
 # Web3 Investor Skill
 
-> **Purpose**: Enable AI agents to safely discover, analyze, and execute DeFi investments.
-> 
-> **Core Philosophy**: Data-driven decisions. No generic advice without real-time discovery.
+> **Purpose**: Enable AI agents to discover and analyze DeFi investment opportunities.
+> **Architecture**: Thin MCP client wrapper - all logic runs on remote server.
 
 ---
 
-## ⚠️ Critical Rules (MUST FOLLOW)
+## ⚠️ Critical Rules
 
 ### Rule 1: Discovery First
-**When user asks for investment advice:**
+When user asks for investment advice:
 ```
-❌ WRONG: Give generic advice immediately (e.g., "I recommend Aave")
-✅ CORRECT: 
-   1. Collect investment preferences (chain, token, risk tolerance)
-   2. Run discovery to get real-time data
+❌ WRONG: Give generic advice immediately
+✅ CORRECT:
+   1. Collect preferences (chain, risk tolerance)
+   2. Run discovery via MCP
    3. Analyze data
    4. Provide data-backed recommendations
 ```
 
-### Rule 2: User's LLM Makes Decisions
-- This skill provides **raw data only**
-- Investment analysis and recommendations are the responsibility of the user's LLM/agent
-- This skill is NOT responsible for investment outcomes
-
-### Rule 3: Risk Acknowledgment
-- APY data comes from third-party APIs and may be delayed or inaccurate
-- Investment decisions are made at the user's own risk
-- Always DYOR (Do Your Own Research)
-
-### Rule 4: Verify Execution Capability Before Trading
-**Before attempting any transaction, the agent MUST check signer availability:**
-```
-❌ WRONG: Directly call preview/execute without checking API
-✅ CORRECT:
-   1. Check if signer API is reachable (call balances endpoint)
-   2. If unreachable → inform user: "Signer service unavailable, please check SETUP.md"
-   3. Never proceed with preview if signer is unavailable
-```
-
-**Health Check Command**:
-```bash
-python3 scripts/trading/trade_executor.py balances --network base
-# If success → signer is available
-# If error E010 → signer unavailable, stop and inform user
-```
-
-### Rule 5: Check Payment Capability FIRST (NEW in v0.5.0)
-**Before asking user for transaction details, ALWAYS check execution readiness:**
-```
-❌ WRONG: Ask "How much do you want to invest?" without checking payment capability
-✅ CORRECT:
-   1. Run: python3 scripts/trading/preflight.py check --network <chain>
-   2. Inform user of available payment methods
-   3. Then ask for transaction details
-```
-
-**Preflight Check Output**:
-```json
-{
-  "recommended": "eip681_payment_link",
-  "methods": [
-    {"method": "keystore_signer", "status": "unavailable"},
-    {"method": "eip681_payment_link", "status": "available"}
-  ],
-  "message": "⚠️ No local signer. Use EIP-681 payment link."
-}
-```
-
-**Payment Method Flow**:
-| Recommended Method | Action |
-|-------------------|--------|
-| `keystore_signer` | Use `preview → approve → execute` flow |
-| `eip681_payment_link` | Generate EIP-681 link with `eip681_payment.py` |
+### Rule 2: Server Handles All Logic
+- This skill is a **thin wrapper** - it only forwards requests
+- All data fetching, analysis, and API key management happens on the server
+- No local environment variables or API keys needed
 
 ---
 
-## 🎯 Quick Start for Agents
+## 🎯 Quick Start
 
-### Step 1: Collect Investment Preferences (REQUIRED)
+### Step 1: Collect Preferences
 
-Before running discovery, ask the user:
-
-| Preference | Key | Options | Why It Matters |
-|------------|-----|---------|----------------|
-| **Chain** | `chain` | ethereum, base, arbitrum, optimism | Determines which blockchain to search |
-| **Capital Token** | `capital_token` | USDC, USDT, ETH, WBTC, etc. | The token they want to invest |
-| **Reward Preference** | `reward_preference` | single / multi / any | Single token rewards vs multiple tokens |
-| **Accept IL** | `accept_il` | true / false / any | Impermanent loss tolerance |
-| **Underlying Type** | `underlying_preference` | rwa / onchain / mixed / any | Real-world assets vs on-chain |
+| Preference | Options | Why It Matters |
+|------------|---------|----------------|
+| **Chain** | ethereum, base, arbitrum, optimism | Determines blockchain to search |
+| **Min APY** | Any number (%) | Filter by yield |
+| **Risk** | conservative, moderate, aggressive | Risk tolerance |
 
 ### Step 2: Run Discovery
 
 ```bash
-# Basic search
-python3 scripts/discovery/find_opportunities.py \
+python3 scripts/mcp_client.py discover \
   --chain ethereum \
   --min-apy 5 \
-  --limit 20
-
-# With LLM-ready output
-python3 scripts/discovery/find_opportunities.py \
-  --chain ethereum \
-  --llm-ready \
-  --output json
+  --limit 5
 ```
 
-### Step 3: Filter by Preferences
+### Step 3: Analyze
 
-```python
-from scripts.discovery.investment_profile import InvestmentProfile
-
-profile = InvestmentProfile()
-profile.set_preferences(
-    chain="ethereum",
-    capital_token="USDC",
-    accept_il=False,
-    reward_preference="single"
-)
-filtered = profile.filter_opportunities(opportunities)
-```
-
-### Step 4: Execute Transaction (Choose Payment Method)
-
-#### Option A: Keystore Signer (Production)
 ```bash
-# Preview → Approve → Execute
-python3 scripts/trading/trade_executor.py preview \
-  --type deposit --protocol aave --asset USDC --amount 1000 --network base
-
-python3 scripts/trading/trade_executor.py approve --preview-id <uuid>
-
-python3 scripts/trading/trade_executor.py execute --approval-id <uuid>
-```
-
-#### Option B: EIP-681 Payment Link (Mobile)
-```bash
-python3 scripts/trading/eip681_payment.py generate \
-  --token USDC --to 0x... --amount 10 --network base \
-  --qr-output /tmp/payment_qr.png
+python3 scripts/mcp_client.py analyze \
+  --product-id aave-usdc-base \
+  --depth detailed
 ```
 
 ---
@@ -178,227 +73,149 @@ python3 scripts/trading/eip681_payment.py generate \
 ```
 web3-investor/
 ├── scripts/
-│   ├── discovery/           # Opportunity discovery tools
-│   ├── trading/             # Transaction execution modules
-│   └── portfolio/           # Balance queries
+│   └── mcp_client.py          # MCP client wrapper
 ├── config/
-│   ├── config.json          # Execution model & security settings
-│   └── protocols.json       # Protocol registry
-├── references/              # Detailed module documentation
-│   ├── discovery.md
-│   ├── investment-profile.md
-│   ├── trade-executor.md
-│   ├── portfolio-indexer.md
-│   ├── protocols.md
-│   └── risk-framework.md
+│   └── config.json            # Legacy config (unused)
 └── SKILL.md
 ```
 
 ---
 
-## 📚 Module Overview
+## 🔧 Available Commands
 
-| Module | Purpose | Details |
-|--------|---------|---------|
-| **Discovery** | Search DeFi yield opportunities | See [references/discovery.md](references/discovery.md) |
-| **Investment Profile** | Preference collection & filtering | See [references/investment-profile.md](references/investment-profile.md) |
-| **Trade Executor** | Transaction execution REST API | See [references/trade-executor.md](references/trade-executor.md) |
-| **Portfolio Indexer** | On-chain balance queries | See [references/portfolio-indexer.md](references/portfolio-indexer.md) |
+| Command | MCP Tool | Description |
+|---------|----------|-------------|
+| `discover` | `investor_discover` | Find DeFi yield opportunities |
+| `analyze` | `investor_analyze` | Deep analysis of single opportunity |
+| `compare` | `investor_compare` | Compare multiple opportunities |
+| `feedback` | `investor_feedback` | Submit feedback on recommendations |
+| `confirm-intent` | `investor_confirm_intent` | Confirm user intent after clarification |
+| `get-intent` | `investor_get_stored_intent` | Get stored intent for session |
 
----
-
-## 🔍 Discovery Data Sources
-
-### Data Sources
-
-| Source | Type | Use Case |
-|--------|------|----------|
-| **DefiLlama** | Protocol TVL/Yields | Primary source for DeFi opportunities |
-| **Dune** | On-chain analytics | Custom queries, advanced analysis |
-
-### Dune MCP Integration
-
-Dune provides powerful on-chain analytics through MCP (Model Context Protocol). Use Dune for:
-- Custom on-chain data queries
-- Protocol-specific analytics
-- Historical trend analysis
-- Whale wallet tracking
-
-**Configuration** (`config/config.json`):
-```json
-{
-  "discovery": {
-    "data_sources": ["defillama", "dune"],
-    "dune": {
-      "mcp_endpoint": "https://api.dune.com/mcp/v1",
-      "auth": {
-        "header": { "name": "x-dune-api-key", "env_var": "DUNE_API_KEY" },
-        "query_param": { "name": "api_key", "env_var": "DUNE_API_KEY" }
-      }
-    }
-  }
-}
-```
-
-**Environment Setup**:
+### discover
 ```bash
-# Required for Dune integration
-export DUNE_API_KEY="your_dune_api_key"
+python3 scripts/mcp_client.py discover \
+  --chain <ethereum|base|arbitrum|optimism> \
+  --min-apy <number> \
+  [--max-apy <number>] \
+  [--stablecoin-only] \
+  [--limit <1-10>] \
+  [--session-id <id>] \
+  [--natural-language <query>]
 ```
 
-**Authentication Methods**:
-1. **Header Auth** (Recommended): `x-dune-api-key: <DUNE_API_KEY>`
-2. **Query Param**: `?api_key=<DUNE_API_KEY>`
-
-**Usage Example**:
+### analyze
 ```bash
-# Query Dune for protocol analytics
-curl -H "x-dune-api-key: $DUNE_API_KEY" \
-  "https://api.dune.com/mcp/v1/query/<query_id>/results"
+python3 scripts/mcp_client.py analyze \
+  --product-id <id> \
+  [--depth basic|detailed|full] \
+  [--no-history]
 ```
 
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
+### compare
 ```bash
-# Optional: Alchemy for better RPC
-ALCHEMY_API_KEY=your_key_here
-
-# Optional: Debank for portfolio tracking
-WEB3_INVESTOR_DEBANK_API_KEY=your_key_here
-
-# Trade Executor: Local API endpoint
-WEB3_INVESTOR_API_URL=http://localhost:3000/api
+python3 scripts/mcp_client.py compare \
+  --ids <id1> <id2> [<id3>...]
 ```
 
-### Security Configuration (`config/config.json`)
-
-```json
-{
-  "security": {
-    "max_trade_usd": 10000,
-    "max_slippage_percent": 3.0,
-    "whitelist_enabled": false,
-    "whitelist_tokens": ["USDC", "USDT", "DAI", "WETH", "ETH", "stETH", "rETH"],
-    "whitelist_protocols": ["uniswap", "aave", "compound", "lido", "0x"],
-    "double_confirm": {
-      "enabled": true,
-      "large_trade_threshold_usd": 5000
-    }
-  }
-}
-```
-
-#### Whitelist Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `whitelist_enabled` | `false` | Enable/disable whitelist filtering in trade execution |
-| `whitelist_tokens` | [...] | Allowed tokens for trading |
-| `whitelist_protocols` | [...] | Allowed protocols for interaction |
-
-**Note**: When `whitelist_enabled` is `false` (default), trade execution skips whitelist checks, allowing broader protocol/token access. Set to `true` to enforce strict whitelist validation.
-
-### Whitelist Setup
-
+### feedback
 ```bash
-python3 scripts/trading/whitelist.py \
-  --add 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 \
-  --name "Aave V3 Pool" \
-  --limit 10000
+python3 scripts/mcp_client.py feedback \
+  --product-id <id> \
+  --feedback <helpful|not_helpful|invested|dismissed> \
+  [--reason <text>]
 ```
 
----
-
-## 📝 Skill Author Template (MUST INCLUDE IN PROMPTS)
-
-When using this skill for transaction generation, include this template:
-
-```
-Output structured transaction request (JSON), do not execute directly.
-All transactions must go through preview -> approve -> execute.
-If transaction parameters cannot be determined, return clarification, do not guess.
-```
-
-### Required Output Format
-
-```json
-{
-  "request_id": "uuid",
-  "timestamp": "ISO8601", 
-  "network": "base|ethereum",
-  "chain_id": 8453|1,
-  "type": "transfer|swap|deposit|contract_call",
-  "description": "human readable description",
-  "transaction": {
-    "to": "0x...",
-    "value": "0x0",
-    "data": "0x...",
-    "gas_limit": 250000
-  },
-  "metadata": {
-    "protocol": "uniswap|aave|compound|...",
-    "from_token": "USDC",
-    "to_token": "WETH", 
-    "amount": "5"
-  }
-}
-```
-
----
-
-## ⚠️ Security Notes
-
-### Signer API Endpoint
-- **Default**: `http://localhost:3000/api` (local only)
-- **Warning**: Only set `WEB3_INVESTOR_API_URL` to endpoints you fully trust
-- **Risk**: Transaction intents, wallet addresses, and portfolio data will be sent to this endpoint
-- **Recommendation**: Never point to public or untrusted remote servers
-
-### API Keys
-- `DUNE_API_KEY` - For Dune Analytics (optional)
-- `WEB3_INVESTOR_DEBANK_API_KEY` - For Debank portfolio tracking (optional)
-- `ALCHEMY_API_KEY` - For enhanced RPC access (optional)
-- **Best Practice**: Store in environment variables, never in config files
-
-### Data Privacy
-- Discovery queries go to DefiLlama, Dune, and MCP servers
-- Portfolio queries go to Debank (if configured) or public RPC
-- Transaction signing happens locally (Phase 1: simulation mode)
-
----
-
-## 🆘 Troubleshooting
-
-### Import Errors
-Run from workspace root:
+### confirm-intent
 ```bash
-cd /home/admin/.openclaw/workspace
-python3 skills/web3-investor/scripts/discovery/find_opportunities.py ...
+python3 scripts/mcp_client.py confirm-intent \
+  --session-id <id> \
+  --type <intent_type> \
+  --risk <risk_profile> \
+  [--capital-nature <nature>] \
+  [--liquidity-need <need>]
 ```
 
-### No Opportunities Found
-- Check chain name spelling
-- Try lowering `--min-apy` threshold
-- Ensure `--max-apy` isn't too restrictive
-
-### Rate Limiting
-- DefiLlama has generous limits but can occasionally rate limit
-- Add delays between requests if batch processing
+### get-intent
+```bash
+python3 scripts/mcp_client.py get-intent \
+  --session-id <id>
+```
 
 ---
 
-## 🤝 Contributing
+## 📊 MCP Tools Reference
 
-Test donations welcome:
-- **Network**: Base Chain
-- **Address**: `0x1F3A9A450428BbF161C4C33f10bd7AA1b2599a3e`
+| Tool | Purpose | Key Response Fields |
+|------|---------|--------------------|
+| `investor_discover` | Find yield opportunities | recommendations[], intent{}, search_stats |
+| `investor_analyze` | Deep analysis | product{}, historical_data, llm_insights |
+| `investor_compare` | Multi-opportunity comparison | products[], comparisons[], recommendation |
+| `investor_feedback` | Feedback submission | acknowledged |
+| `investor_confirm_intent` | Intent confirmation | acknowledged, session_id |
+| `investor_get_stored_intent` | Retrieve stored intent | found, intent{} |
 
 ---
 
-**Maintainer**: Web3 Investor Skill Team  
-**Registry**: https://clawhub.com/skills/web3-investor  
+## 🧪 Example Sessions
+
+### Session 1: Find and Analyze
+```
+User: Find me ETH lending on Base with >5% APY
+Agent:
+  python3 scripts/mcp_client.py discover --chain base --min-apy 5
+
+User: Analyze the best one
+Agent:
+  python3 scripts/mcp_client.py analyze --product-id aave-eth-base --depth detailed
+```
+
+### Session 2: Compare Opportunities
+```
+User: Compare aave-usdc-base vs compound-usdc-ethereum
+Agent:
+  python3 scripts/mcp_client.py compare --ids aave-usdc-base compound-usdc-ethereum
+```
+
+### Session 3: Intent Clarification Flow
+```
+User: I want to invest in DeFi
+Agent:
+  # Server returns NEEDS_CLARIFICATION
+  python3 scripts/mcp_client.py discover --natural-language "I want to invest in DeFi"
+  # Returns clarification question
+
+User: [Selects: stablecoin, moderate risk, 1 month horizon]
+Agent:
+  python3 scripts/mcp_client.py confirm-intent \
+    --session-id <id> \
+    --type stablecoin \
+    --risk moderate
+
+User: Now find opportunities
+Agent:
+  python3 scripts/mcp_client.py discover --session-id <id>
+```
+
+### Session 4: Provide Feedback
+```
+User: The aave recommendation was helpful
+Agent:
+  python3 scripts/mcp_client.py feedback \
+    --product-id aave-usdc-base \
+    --feedback helpful
+```
+
+---
+
+## 🔒 Security Notes
+
+- All API keys managed server-side
+- No sensitive data stored locally
+- Requests go directly to MCP server: `https://mcp-skills.ai.antalpha.com/mcp`
+
+---
+
+**Maintainer**: Web3 Investor Skill Team
+**Registry**: https://clawhub.com/skills/web3-investor
 **License**: MIT
