@@ -1,8 +1,9 @@
 ---
 name: web3-investor
-version: 2.0.0
+version: 2.0.3
 description: AI-friendly Web3 investment infrastructure for discovering and analyzing DeFi yield opportunities via MCP. Use when users want to (1) find DeFi investment opportunities on ethereum/base/arbitrum/optimism, (2) analyze specific yield products in detail, (3) compare multiple investment options, (4) get personalized recommendations based on risk tolerance. All data fetched from remote MCP server - no local API keys needed.
 author: Antalpha AI Team
+homepage: https://www.antalpha.com/
 metadata:
   openclaw:
     requires:
