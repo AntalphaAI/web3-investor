@@ -5,11 +5,16 @@ Web3 Investor MCP Client
 Wrapper that calls the MCP server at https://mcp-skills.ai.antalpha.com/mcp
 All logic runs on the remote server.
 
+MCP Protocol Flow:
+1. POST initialize → get mcp-session-id from response headers
+2. POST notifications/initialized → confirm session
+3. POST tools/call → actual tool invocation
+
 Usage:
     python3 scripts/mcp_client.py discover --chain ethereum --min-apy 5
-    python3 scripts/mcp_client.py analyze --product-id aave-usdc-base --depth detailed
-    python3 scripts/mcp_client.py compare --ids aave-usdc-base compound-usdc-ethereum
-    python3 scripts/mcp_client.py feedback --product-id aave-usdc-base --feedback helpful
+    python3 scripts/mcp_client.py analyze --product-id <uuid> --depth detailed
+    python3 scripts/mcp_client.py compare --ids <uuid1> <uuid2>
+    python3 scripts/mcp_client.py feedback --product-id <uuid> --feedback helpful
     python3 scripts/mcp_client.py confirm-intent --session-id xxx --type stablecoin --risk moderate
     python3 scripts/mcp_client.py get-intent --session-id xxx
 """
@@ -21,49 +26,164 @@ import urllib.request
 import urllib.error
 from typing import Any, Optional
 
+
 MCP_SERVER_URL = "https://mcp-skills.ai.antalpha.com/mcp"
 
 
-def call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    """
-    Call an MCP tool and return the result.
-    JSON-RPC 2.0 format for MCP tool calls.
-    """
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments,
-        },
-        "id": 1,
-    }
+class MCPClient:
+    """MCP client with proper session management."""
 
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    def __init__(self, server_url: str = MCP_SERVER_URL):
+        self.server_url = server_url
+        self.session_id: Optional[str] = None
 
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            MCP_SERVER_URL, data=data, headers=headers, method="POST"
-        )
+    def _parse_sse_response(self, response_text: str) -> dict:
+        """Parse SSE (Server-Sent Events) response format."""
+        for line in response_text.split("\n"):
+            if line.startswith("data: ") or line.startswith("data:"):
+                data_str = line[5:].strip()
+                if data_str and data_str != "[DONE]":
+                    return json.loads(data_str)
+        return {}
 
-        with urllib.request.urlopen(req, timeout=60) as response:
-            response_text = response.read().decode("utf-8")
-            result = json.loads(response_text)
+    def initialize(self) -> bool:
+        """
+        Initialize MCP session.
+        Must be called before any tool calls.
+        Returns True if successful.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "web3-investor-client",
+                    "version": "1.0.0",
+                },
+            },
+            "id": 1,
+        }
 
-            if "error" in result:
-                return {"error": result["error"]}
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
 
-            return result.get("result", {})
-    except urllib.error.URLError as e:
-        return {"error": f"Connection error: {str(e)}"}
-    except json.JSONDecodeError as e:
-        return {"error": f"Failed to parse response: {str(e)}"}
-    except Exception as e:
-        return {"error": f"Unexpected error: {str(e)}"}
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                self.server_url, data=data, headers=headers, method="POST"
+            )
+
+            with urllib.request.urlopen(req, timeout=60) as response:
+                # Get session ID from response headers
+                self.session_id = response.headers.get("mcp-session-id")
+
+                response_text = response.read().decode("utf-8")
+                result = self._parse_sse_response(response_text)
+
+                if "error" in result:
+                    print(f"Initialize error: {result['error']}", file=sys.stderr)
+                    return False
+
+                # Send initialized notification
+                self._send_initialized()
+                return True
+
+        except Exception as e:
+            print(f"Initialize failed: {e}", file=sys.stderr)
+            return False
+
+    def _send_initialized(self) -> None:
+        """Send notifications/initialized to complete handshake."""
+        if not self.session_id:
+            return
+
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {},
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "Mcp-Session-Id": self.session_id,
+        }
+
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                self.server_url, data=data, headers=headers, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=30):
+                pass  # Notification doesn't return content
+        except Exception:
+            pass  # Ignore notification errors
+
+    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """
+        Call an MCP tool and return the result.
+        Auto-initializes session if needed.
+        """
+        # Auto-initialize if no session
+        if not self.session_id:
+            if not self.initialize():
+                return {"error": "Failed to initialize MCP session"}
+
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments,
+            },
+            "id": 2,
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "Mcp-Session-Id": self.session_id,
+        }
+
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                self.server_url, data=data, headers=headers, method="POST"
+            )
+
+            with urllib.request.urlopen(req, timeout=120) as response:
+                response_text = response.read().decode("utf-8")
+                result = self._parse_sse_response(response_text)
+
+                if "error" in result:
+                    return {"error": result["error"]}
+
+                return result.get("result", {})
+
+        except urllib.error.HTTPError as e:
+            return {"error": f"HTTP {e.code}: {e.reason}"}
+        except urllib.error.URLError as e:
+            return {"error": f"Connection error: {str(e)}"}
+        except json.JSONDecodeError as e:
+            return {"error": f"Failed to parse response: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Unexpected error: {str(e)}"}
+
+
+# Global client instance
+_client: Optional[MCPClient] = None
+
+
+def get_client() -> MCPClient:
+    """Get or create MCP client instance."""
+    global _client
+    if _client is None:
+        _client = MCPClient()
+    return _client
 
 
 def discover(
@@ -76,28 +196,25 @@ def discover(
     natural_language: Optional[str] = None,
 ) -> dict[str, Any]:
     """Discover DeFi investment opportunities (investor_discover)."""
-    args: dict[str, Any] = {
-        "limit": limit,
-    }
+    args: dict[str, Any] = {"limit": limit}
+
     if session_id:
         args["session_id"] = session_id
     if natural_language:
         args["natural_language"] = natural_language
-    if max_apy is not None:
-        args["structured_preferences"] = {
-            "chain": chain,
-            "min_apy": min_apy,
-            "max_apy": max_apy,
-            "asset_type": "stablecoin" if stablecoin_only else "any",
-        }
-    else:
-        args["structured_preferences"] = {
-            "chain": chain,
-            "min_apy": min_apy,
-            "asset_type": "stablecoin" if stablecoin_only else "any",
-        }
 
-    return call_mcp_tool("investor_discover", args)
+    prefs: dict[str, Any] = {
+        "chain": chain,
+        "min_apy": min_apy,
+    }
+    if max_apy is not None:
+        prefs["max_apy"] = max_apy
+    if stablecoin_only:
+        prefs["asset_type"] = "stablecoin"
+
+    args["structured_preferences"] = prefs
+
+    return get_client().call_tool("investor_discover", args)
 
 
 def analyze(
@@ -106,7 +223,7 @@ def analyze(
     include_history: bool = True,
 ) -> dict[str, Any]:
     """Deep analysis of a specific opportunity (investor_analyze)."""
-    return call_mcp_tool(
+    return get_client().call_tool(
         "investor_analyze",
         {
             "product_id": product_id,
@@ -118,7 +235,7 @@ def analyze(
 
 def compare(product_ids: list[str]) -> dict[str, Any]:
     """Compare multiple opportunities (investor_compare)."""
-    return call_mcp_tool(
+    return get_client().call_tool(
         "investor_compare",
         {
             "product_ids": product_ids,
@@ -139,7 +256,7 @@ def feedback(
     if reason:
         args["reason"] = reason
 
-    return call_mcp_tool("investor_feedback", args)
+    return get_client().call_tool("investor_feedback", args)
 
 
 def confirm_intent(
@@ -159,7 +276,7 @@ def confirm_intent(
     if liquidity_need:
         confirmed_intent["liquidity_need"] = liquidity_need
 
-    return call_mcp_tool(
+    return get_client().call_tool(
         "investor_confirm_intent",
         {
             "session_id": session_id,
@@ -170,7 +287,7 @@ def confirm_intent(
 
 def get_stored_intent(session_id: str) -> dict[str, Any]:
     """Get stored intent for a session (investor_get_stored_intent)."""
-    return call_mcp_tool(
+    return get_client().call_tool(
         "investor_get_stored_intent",
         {"session_id": session_id},
     )
@@ -182,7 +299,9 @@ def main():
 
     discover_parser = subparsers.add_parser("discover", help="Discover opportunities")
     discover_parser.add_argument(
-        "--chain", required=True, help="Blockchain: ethereum, base, arbitrum, optimism"
+        "--chain",
+        default="ethereum",
+        help="Blockchain: ethereum, base, arbitrum, optimism",
     )
     discover_parser.add_argument(
         "--min-apy", type=float, default=0, help="Minimum APY percentage"
