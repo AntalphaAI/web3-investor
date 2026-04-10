@@ -236,6 +236,12 @@ AI 驱动的 DeFi 收益发现与分析技能。支持在 Ethereum、Base、Arbi
 openclaw skill install https://github.com/AntalphaAI/web3-investor
 ```
 
+### 通过 ClawHub 安装
+
+```bash
+clawhub install web3-investor
+```
+
 > 依赖 [OpenClaw](https://www.antalpha.com/)，Python 3.7+。  
 > 无需配置任何环境变量。
 
