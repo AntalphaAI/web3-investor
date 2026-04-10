@@ -12,6 +12,12 @@ AI-friendly DeFi investment intelligence skill. Discover, analyze, and compare y
 openclaw skill install https://github.com/AntalphaAI/web3-investor
 ```
 
+### Install via ClawHub
+
+```bash
+clawhub install web3-investor
+```
+
 > Requires [OpenClaw](https://www.antalpha.com/) with Python 3.7+.  
 > No environment variables required — all data is fetched from the remote MCP server.
 
