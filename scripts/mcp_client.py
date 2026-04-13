@@ -14,9 +14,6 @@ Usage:
     python3 scripts/mcp_client.py discover --chain ethereum --min-apy 5
     python3 scripts/mcp_client.py analyze --product-id <uuid> --depth detailed
     python3 scripts/mcp_client.py compare --ids <uuid1> <uuid2>
-    python3 scripts/mcp_client.py feedback --product-id <uuid> --feedback helpful
-    python3 scripts/mcp_client.py confirm-intent --session-id xxx --type stablecoin --risk moderate
-    python3 scripts/mcp_client.py get-intent --session-id xxx
 """
 
 import argparse
@@ -243,54 +240,194 @@ def compare(product_ids: list[str]) -> dict[str, Any]:
     )
 
 
-def feedback(
-    product_id: str,
-    feedback_type: str,
-    reason: Optional[str] = None,
-) -> dict[str, Any]:
-    """Submit feedback on a recommendation (investor_feedback)."""
-    args: dict[str, Any] = {
-        "product_id": product_id,
-        "feedback": feedback_type,
-    }
-    if reason:
-        args["reason"] = reason
-
-    return get_client().call_tool("investor_feedback", args)
 
 
-def confirm_intent(
-    session_id: str,
-    intent_type: str,
-    risk_profile: str,
-    capital_nature: Optional[str] = None,
-    liquidity_need: Optional[str] = None,
-) -> dict[str, Any]:
-    """Confirm user intent after clarification (investor_confirm_intent)."""
-    confirmed_intent: dict[str, Any] = {
-        "type": intent_type,
-        "risk_profile": risk_profile,
-    }
-    if capital_nature:
-        confirmed_intent["capital_nature"] = capital_nature
-    if liquidity_need:
-        confirmed_intent["liquidity_need"] = liquidity_need
 
-    return get_client().call_tool(
-        "investor_confirm_intent",
-        {
-            "session_id": session_id,
-            "confirmed_intent": confirmed_intent,
-        },
+def format_response(result: dict[str, Any]) -> str:
+    """Format raw MCP response for human-readable display."""
+    if "error" in result:
+        return f"❌ 错误: {result['error']}"
+
+    lines: list[str] = []
+
+    # ── NEEDS_CLARIFICATION (discover gate) ──
+    if result.get("structuredContent", {}).get("gate_status") == "NEEDS_CLARIFICATION":
+        return _format_clarification(result["structuredContent"])
+
+    # ── analyzer_meta (analyze result) ──
+    if "structuredContent" in result and "product" in result["structuredContent"]:
+        lines.append(_format_analyze(result["structuredContent"]))
+        _append_analysis_meta(result["structuredContent"], lines)
+        _append_suggested_actions(result["structuredContent"], lines)
+        return "\n".join(lines)
+
+    # ── discover result ──
+    if (
+        "structuredContent" in result
+        and "recommendations" in result["structuredContent"]
+    ):
+        lines.append(_format_discover(result["structuredContent"]))
+        _append_suggested_actions(result["structuredContent"], lines)
+        return "\n".join(lines)
+
+    # ── compare result ──
+    if "structuredContent" in result and "comparisons" in result["structuredContent"]:
+        lines.append(_format_compare(result["structuredContent"]))
+        return "\n".join(lines)
+
+    return json.dumps(result, indent=2)
+
+
+def _format_clarification(sc: dict[str, Any]) -> str:
+    """Format NEEDS_CLARIFICATION response."""
+    cla = sc.get("clarification", {})
+    lines: list[str] = []
+    lines.append("❓ 需要澄清意图\n")
+    lines.append(f"问题: {cla.get('question', '')}")
+
+    structured_opts = cla.get("structured_options") or []
+    if structured_opts:
+        lines.append("\n请选择:")
+        for opt in structured_opts:
+            lines.append(f"  [{opt['id']}] {opt['label']} — {opt['description']}")
+    else:
+        opts = cla.get("options", [])
+        if opts:
+            lines.append("\n选项:")
+            for o in opts:
+                lines.append(f"  • {o}")
+
+    guidance = cla.get("guidance_for_agent", "")
+    if guidance:
+        lines.append(f"\n提示: {guidance}")
+
+    ctx = cla.get("context", {})
+    if ctx:
+        we_know = ctx.get("what_we_know", [])
+        we_need = ctx.get("what_we_need", [])
+        if we_know:
+            lines.append(f"\n已收集: {', '.join(we_know)}")
+        if we_need:
+            lines.append(f"还需:  {', '.join(we_need)}")
+
+    # Show suggested next actions from top-level
+    actions = sc.get("suggested_next_actions", [])
+    if actions:
+        lines.append("\n下一步:")
+        for a in sorted(actions, key=lambda x: x.get("priority", 99)):
+            lines.append(f"  → {a.get('action', '')}")
+
+    return "\n".join(lines)
+
+
+def _format_discover(sc: dict[str, Any]) -> str:
+    """Format discover result."""
+    recs = sc.get("recommendations", [])
+    stats = sc.get("search_stats", {})
+    lines: list[str] = []
+    lines.append(f"📊 发现 {len(recs)} 个投资机会")
+    lines.append(
+        f"   候选池: {stats.get('total_candidates', 0)} | 通过筛选: {stats.get('total_after_risk_filter', 0)}"
     )
 
+    for i, rec in enumerate(recs, 1):
+        name = rec.get("name", rec.get("protocol_name", "Unknown"))
+        apy = rec.get("yield", {}).get("apy", 0)
+        tvl = rec.get("scale", {}).get("tvl_usd", 0)
+        risk = rec.get("risk", {}).get("risk_score", 0)
+        tvl_m = f"${tvl / 1e6:.0f}M" if tvl >= 1e6 else f"${tvl / 1e3:.0f}K"
+        lines.append(f"\n  {i}. {name}")
+        lines.append(f"     APY: {apy:.1f}%  TVL: {tvl_m}  安全评分: {risk}")
 
-def get_stored_intent(session_id: str) -> dict[str, Any]:
-    """Get stored intent for a session (investor_get_stored_intent)."""
-    return get_client().call_tool(
-        "investor_get_stored_intent",
-        {"session_id": session_id},
-    )
+        explanation = rec.get("explanation")
+        if explanation and explanation.get("summary"):
+            lines.append(f"     摘要: {explanation['summary']}")
+
+    return "\n".join(lines)
+
+
+def _format_analyze(sc: dict[str, Any]) -> str:
+    """Format analyze result."""
+    product = sc.get("product", {})
+    name = product.get("name", product.get("protocol_name", "Unknown"))
+    apy = product.get("yield", {}).get("apy", 0)
+    lines: list[str] = []
+    lines.append(f"🔍 分析: {name}")
+    lines.append(f"   APY: {apy:.1f}%")
+
+    llm = sc.get("llm_insights")
+    if llm and llm.get("sustainability_assessment"):
+        lines.append(f"   可持续性: {llm.get('sustainability_assessment', '')[:120]}")
+    if llm and llm.get("risk_narrative"):
+        lines.append(f"   风险: {llm['risk_narrative'][:120]}")
+
+    return "\n".join(lines)
+
+
+def _append_analysis_meta(sc: dict[str, Any], lines: list[str]) -> None:
+    """Append analysis_meta transparency info."""
+    meta = sc.get("analysis_meta")
+    if not meta:
+        return
+
+    indicators: list[str] = []
+    if meta.get("llm_used"):
+        if meta.get("cache_hit"):
+            indicators.append("📦 缓存命中")
+        else:
+            indicators.append("🧠 LLM 深度分析")
+    else:
+        indicators.append("⚠️ 规则引擎降级")
+
+    if meta.get("fallback_applied"):
+        indicators.append("⚠️ 已使用降级方案")
+
+    confidence = meta.get("confidence_note", "")
+    error = meta.get("llm_error")
+    if error:
+        lines.append(f"\n   分析状态: {' | '.join(indicators)}")
+        lines.append(f"   注意: {confidence}")
+    elif confidence:
+        lines.append(f"\n   分析状态: {' | '.join(indicators)}")
+        lines.append(f"   注意: {confidence}")
+
+
+def _append_suggested_actions(sc: dict[str, Any], lines: list[str]) -> None:
+    """Append suggested next actions."""
+    actions = sc.get("suggested_next_actions", [])
+    if not actions:
+        return
+    lines.append("\n💡 建议下一步:")
+    for a in sorted(actions, key=lambda x: x.get("priority", 99)):
+        hint = a.get("command_hint", "")
+        lines.append(f"  → {a.get('action', '')}{' — ' + hint if hint else ''}")
+
+
+def _format_compare(sc: dict[str, Any]) -> str:
+    """Format compare result."""
+    products = sc.get("products", [])
+    comps = sc.get("comparisons", [])
+    lines: list[str] = []
+    names = [p.get("name", p.get("id", "?")) for p in products]
+    lines.append(f"⚖️ 对比: {' vs '.join(names)}")
+
+    for c in comps:
+        dim = c.get("dimension", "")
+        best = c.get("best_performer", "")
+        lines.append(f"\n  {dim}:")
+        for pid, val in c.get("values", {}).items():
+            marker = " ★" if pid == best else ""
+            lines.append(f"    {pid}: {val}{marker}")
+
+    rec = sc.get("recommendation", "")
+    if rec:
+        lines.append(f"\n  推荐: {rec}")
+
+    llm_comp = sc.get("llm_comparison")
+    if llm_comp and llm_comp.get("narrative"):
+        lines.append(f"\n  LLM 解读: {llm_comp['narrative'][:200]}")
+
+    return "\n".join(lines)
 
 
 def main():
@@ -330,26 +467,6 @@ def main():
     compare_parser = subparsers.add_parser("compare", help="Compare opportunities")
     compare_parser.add_argument("--ids", nargs="+", required=True, help="Product IDs")
 
-    feedback_parser = subparsers.add_parser("feedback", help="Submit feedback")
-    feedback_parser.add_argument("--product-id", required=True, help="Product ID")
-    feedback_parser.add_argument(
-        "--feedback",
-        choices=["helpful", "not_helpful", "invested", "dismissed"],
-        required=True,
-        help="Feedback type",
-    )
-    feedback_parser.add_argument("--reason", help="Optional reason")
-
-    confirm_parser = subparsers.add_parser("confirm-intent", help="Confirm intent")
-    confirm_parser.add_argument("--session-id", required=True, help="Session ID")
-    confirm_parser.add_argument("--type", required=True, help="Intent type")
-    confirm_parser.add_argument("--risk", required=True, help="Risk profile")
-    confirm_parser.add_argument("--capital-nature", help="Capital nature")
-    confirm_parser.add_argument("--liquidity-need", help="Liquidity need")
-
-    get_intent_parser = subparsers.add_parser("get-intent", help="Get stored intent")
-    get_intent_parser.add_argument("--session-id", required=True, help="Session ID")
-
     args = parser.parse_args()
 
     if args.command is None:
@@ -376,25 +493,11 @@ def main():
         )
     elif args.command == "compare":
         result = compare(product_ids=args.ids)
-    elif args.command == "feedback":
-        result = feedback(
-            product_id=args.product_id,
-            feedback_type=args.feedback,
-            reason=args.reason,
-        )
-    elif args.command == "confirm-intent":
-        result = confirm_intent(
-            session_id=args.session_id,
-            intent_type=args.type,
-            risk_profile=args.risk,
-            capital_nature=args.capital_nature,
-            liquidity_need=args.liquidity_need,
-        )
-    elif args.command == "get-intent":
-        result = get_stored_intent(session_id=args.session_id)
+
 
     if result:
-        print(json.dumps(result, indent=2))
+        formatted = format_response(result)
+        print(formatted)
     else:
         print(json.dumps({"error": "Unknown command"}, indent=2))
         sys.exit(1)
