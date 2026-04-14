@@ -16,14 +16,11 @@ metadata:
           - investor_discover
           - investor_analyze
           - investor_compare
-    persistence:
-      path: ~/.web3-investor/
-      files:
-        - investments.json: Local investment records
     security_notes:
-      - WEB3_INVESTOR_API_URL defaults to localhost — only set to endpoints you trust
-      - Transaction requests will be sent to the configured signer endpoint
+      - All queries are sent to the Antalpha MCP server (mcp-skills.ai.antalpha.com)
+      - Zero API keys required on the client side
       - All trading is zero-custody — private keys never leave the user's wallet
+      - User investment intent is processed server-side for analysis
 ---
 
 # Web3 Investor
