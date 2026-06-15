@@ -121,9 +121,6 @@ python3 scripts/mcp_client.py get-intent \
 | `investor_discover` | Find yield opportunities | `recommendations[]`, `intent{}`, `search_stats` |
 | `investor_analyze` | Deep analysis of one product | `product{}`, `historical_data`, `llm_insights` |
 | `investor_compare` | Compare multiple products | `products[]`, `comparisons[]`, `recommendation` |
-| `investor_feedback` | Submit feedback | `acknowledged` |
-| `investor_confirm_intent` | Lock in user intent | `acknowledged`, `session_id` |
-| `investor_get_stored_intent` | Retrieve stored intent | `found`, `intent{}` |
 
 ---
 
@@ -345,9 +342,6 @@ python3 scripts/mcp_client.py get-intent \
 | `investor_discover` | 发现收益机会 | `recommendations[]`, `intent{}`, `search_stats` |
 | `investor_analyze` | 单产品深度分析 | `product{}`, `historical_data`, `llm_insights` |
 | `investor_compare` | 多产品横向对比 | `products[]`, `comparisons[]`, `recommendation` |
-| `investor_feedback` | 提交反馈 | `acknowledged` |
-| `investor_confirm_intent` | 锁定用户意图 | `acknowledged`, `session_id` |
-| `investor_get_stored_intent` | 获取已存储意图 | `found`, `intent{}` |
 
 ---
 
