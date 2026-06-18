@@ -1,6 +1,6 @@
 ---
 name: web3-investor
-version: 3.8.0
+version: 3.8.1
 description: AI-native DeFi investment intelligence. Discover, analyze, and compare yield opportunities across 2,500+ protocols with intent-aware search, LLM-powered deep analysis, 7-dimension risk scoring, DeFi security scanning, smart money sentiment, and multi-round conversational refinement. All intelligence runs server-side — zero API keys on the client.
 author: Antalpha AI Team
 homepage: https://www.antalpha.com/
@@ -174,6 +174,22 @@ Round 2:
 ### `investor_analyze` — Deep Analysis
 
 LLM-powered 5-step reasoning chain for a single product. Goes beyond numbers to provide *understanding*.
+
+**Two ways to target a product:**
+- `product_id` — an opaque id from a prior `investor_discover` result (`recommendations[].id`). Only use a real id; never invent one.
+- `query` — a protocol name (`"Aave"`) or natural-language request (`"the USDC pool on Arbitrum"`). Use this whenever you don't have a `product_id`.
+
+Provide exactly one of the two. Then pick a depth and optionally include history.
+
+**Request:**
+```json
+{
+  "agent_id": "uuid",
+  "query": "the USDC pool on Aave",
+  "analysis_depth": "detailed",
+  "include_history": true
+}
+```
 
 **Analysis depths:**
 
@@ -399,6 +415,11 @@ Every recommendation should include the `explanation` object — summary, reason
 ---
 
 ## 📝 Changelog
+
+### v3.8.1 (2026-06-18)
+- **Tool alignment with live MCP service** (`origin/main`) — verified `investor_discover`, `investor_analyze`, `investor_compare` against their `registerTool` input schemas; no renames or removals needed
+- Documented `investor_analyze`'s `query` parameter (analyze by protocol name / natural-language request when no `product_id` is available) and added a request example
+- Confirmed unified endpoint `https://mcp-skills.ai.antalpha.com/mcp` (`streamable-http`); first call registers via `antalpha-register`
 
 ### v3.8.0 (2026-04-14)
 - **Full SKILL.md rewrite** — English, feature-focused, comprehensive
